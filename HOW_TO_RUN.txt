@@ -1,0 +1,98 @@
+================================================================================
+           AI HANDBOOK & KNOWLEDGE BASE (RAG ASSISTANT) - RUN GUIDE
+================================================================================
+
+This document provides a simple, step-by-step guide to run the AI Handbook & 
+Knowledge Base Streamlit application on your system.
+
+--------------------------------------------------------------------------------
+1. PREREQUISITES
+--------------------------------------------------------------------------------
+Ensure you have Python (version 3.9 or higher) installed on your system.
+You can verify your Python installation by running:
+
+    python --version
+
+--------------------------------------------------------------------------------
+2. OPEN YOUR TERMINAL / COMMAND PROMPT
+--------------------------------------------------------------------------------
+Open PowerShell, Command Prompt (cmd), or your terminal of choice, and navigate 
+to the project directory:
+
+    cd "d:\project\AI Handbook with RAG"
+
+--------------------------------------------------------------------------------
+3. (OPTIONAL) CREATE AND ACTIVATE A VIRTUAL ENVIRONMENT
+--------------------------------------------------------------------------------
+It is recommended to use an isolated Python environment:
+
+On Windows:
+    python -m venv venv
+    .\venv\Scripts\activate
+
+On macOS / Linux:
+    python3 -m venv venv
+    source venv/bin/activate
+
+--------------------------------------------------------------------------------
+4. INSTALL DEPENDENCIES
+--------------------------------------------------------------------------------
+Install the required packages using pip:
+
+    pip install -r requirements.txt
+
+Alternatively, you can directly install Streamlit:
+
+    pip install streamlit
+
+--------------------------------------------------------------------------------
+5. RUN THE APPLICATION
+--------------------------------------------------------------------------------
+Start the Streamlit development server by running:
+
+    streamlit run app.py
+
+Or run via Python module:
+
+    python -m streamlit run app.py
+
+--------------------------------------------------------------------------------
+6. ACCESS THE WEB APPLICATION
+--------------------------------------------------------------------------------
+Once the server starts, it will display local and network URLs in your terminal:
+
+    Local URL: http://localhost:8501
+
+Open your web browser (Chrome, Edge, Firefox, Brave, etc.) and navigate to:
+
+    http://localhost:8501
+
+--------------------------------------------------------------------------------
+7. HOW TO USE THE APP
+--------------------------------------------------------------------------------
+- Top Header: Shows application title and active RAG status.
+- Welcome Screen: Displays starter questions (Remote work, Leave, Reimbursement, etc.).
+- Chat Input: Type your question at the bottom input bar and press Enter or click the arrow button.
+- Sidebar:
+    * Click "＋ New Chat" to clear the session and start fresh.
+    * View "Recent Inquiries" from your current session.
+    * Read the "About" information section.
+
+--------------------------------------------------------------------------------
+8. HOW TO STOP THE APP
+--------------------------------------------------------------------------------
+To stop the server at any time:
+1. Go to the terminal / PowerShell window where the app is running.
+2. Press `Ctrl + C` (or `Ctrl + Break`).
+
+--------------------------------------------------------------------------------
+9. TROUBLESHOOTING
+--------------------------------------------------------------------------------
+* Port already in use:
+  If port 8501 is occupied, you can run the app on a different port:
+      streamlit run app.py --server.port 8502
+
+* Streamlit command not recognized:
+  Use Python module syntax:
+      python -m streamlit run app.py
+================================================================================
