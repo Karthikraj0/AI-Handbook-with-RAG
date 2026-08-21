@@ -2,7 +2,7 @@ from rag.retrieve import retrieve_documents
 from rag.generator import generate_answer, generate_answer_stream
 
 
-DISTANCE_THRESHOLD = 0.75
+DISTANCE_THRESHOLD = 0.47
 NO_POLICY_FOUND_MSG = "I couldn't find that information in the company policies."
 
 

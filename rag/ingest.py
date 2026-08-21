@@ -1,7 +1,7 @@
 from rag.loader import load_pdfs
 from rag.chunker import chunk_documents
 from rag.embeddings import create_embeddings
-from rag.vectorstore import get_collection, add_chunks
+from rag.vectorstore import reset_collection, add_chunks
 
 
 DOCUMENTS_PATH = "documents"
@@ -29,9 +29,9 @@ def ingest_documents():
 
     print(f"Created {len(embeddings)} embeddings.")
 
-    print("Opening ChromaDB...")
+    print("Opening ChromaDB (resetting collection with cosine space)...")
 
-    collection = get_collection()
+    collection = reset_collection()
 
     print("Adding data to ChromaDB...")
 
