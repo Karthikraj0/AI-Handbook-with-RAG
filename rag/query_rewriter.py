@@ -1,9 +1,10 @@
 import logging
+import re
 import ollama
 
 logger = logging.getLogger(__name__)
 
-REWRITER_MODEL = "gpt-oss:latest"
+REWRITER_MODEL = "qwen3:1.7b"
 
 REFORMULATION_SYSTEM_PROMPT = """You are a query reformulation component for a company-policy RAG system.
 
@@ -12,27 +13,37 @@ Rewrite the user's query into a clear, concise search query suitable for semanti
 Rules:
 1. Preserve the user's original intent.
 2. Correct obvious spelling and grammar mistakes.
-3. Expand common workplace abbreviations and acronyms when appropriate:
-   - WFH / wfh -> work from home
-   - PTO / pto -> paid time off / annual leave
-   - LOP / lop -> loss of pay / unpaid leave
-   - TA/DA -> travel allowance / daily per diem allowance
+3. Expand common workplace abbreviations and acronyms:
+   - WFH / wfh -> work from home policy
+   - PTO / pto -> paid time off policy
+   - LOP / lop -> loss of pay leave policy
+   - TA/DA -> travel allowance and daily per diem allowance
    - PF -> provident fund
    - VPN -> virtual private network remote access
-   - BYOD -> bring your own device
+   - BYOD -> bring your own device security guidelines
    - NDA -> non-disclosure agreement
    - HR -> human resources
-4. Clarify informal wording, slang, or single-word queries into searchable policy terms.
+4. Clarify informal wording, slang, typos, or single-word queries into searchable policy terms.
 5. Do NOT answer the question.
 6. Do NOT invent company policies, rules, numbers, dates, or facts.
 7. Do NOT add information that is not implied by the user's query.
 8. Return ONLY the rewritten search query. Do NOT add quotes, markdown formatting, prefixes, or explanations.
 9. Keep the rewritten query concise.
+10. Strip out any non-work chatter, math problems (e.g., 'and 4+5'), or trivia attached to a policy query.
 
 Examples:
 
 User: "wfh?"
 Output: work from home policy
+
+User: "WFH policy"
+Output: work from home policy
+
+User: "how many days can i work from home"
+Output: how many days can employees work from home
+
+User: "health insurence benefits"
+Output: health insurance benefits
 
 User: "Can I wfh?"
 Output: Can I work from home?
@@ -42,6 +53,9 @@ Output: work from home policy
 
 User: "how many leave i get?"
 Output: employee leave entitlement
+
+User: "pto?"
+Output: paid time off policy
 
 User: "pto policy"
 Output: paid time off policy
@@ -65,7 +79,8 @@ Output: Can I work from home?
 
 def reformulate_query(query: str) -> str:
     """
-    Reformulates the user's query into a clear search query for semantic vector retrieval.
+    Reformulates the user's query into a clear search query for semantic vector retrieval using Qwen3 (1.7B).
+    Configured with non-thinking mode for fast inference.
     If the LLM call fails, times out, or produces an invalid output, safely falls back to the original query.
     """
     if not query or not query.strip():
@@ -74,26 +89,36 @@ def reformulate_query(query: str) -> str:
     clean_query = query.strip()
 
     try:
-        response = ollama.chat(
-            model=REWRITER_MODEL,
-            messages=[
+        kwargs = {
+            "model": REWRITER_MODEL,
+            "messages": [
                 {
                     "role": "system",
                     "content": REFORMULATION_SYSTEM_PROMPT
                 },
                 {
                     "role": "user",
-                    "content": f"User query:\n{clean_query}"
+                    "content": f"User: {clean_query}\nOutput:"
                 }
             ],
-            options={
+            "options": {
                 "temperature": 0.0,
                 "top_p": 0.9,
             },
-            keep_alive="1h"
-        )
+            "keep_alive": "1h"
+        }
+
+        # Attempt to pass think=False if supported by current Ollama version
+        try:
+            response = ollama.chat(**kwargs, think=False)
+        except TypeError:
+            response = ollama.chat(**kwargs)
 
         reformulated = response.get("message", {}).get("content", "").strip()
+
+        # Strip any <think>...</think> reasoning blocks if present
+        if "<think>" in reformulated and "</think>" in reformulated:
+            reformulated = re.sub(r"<think>.*?</think>", "", reformulated, flags=re.DOTALL).strip()
 
         # Remove surrounding quotes or backticks if generated
         if (reformulated.startswith('"') and reformulated.endswith('"')) or \

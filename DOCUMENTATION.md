@@ -30,11 +30,11 @@ graph TD
 
     subgraph Runtime_Phase ["Runtime RAG Execution"]
         User["User Question (Streamlit UI / app.py)"] --> Pipeline["rag/pipeline.py (ask_question_stream)"]
-        Pipeline --> Rewriter["rag/query_rewriter.py (Ollama Reformulation)"]
+        Pipeline --> Rewriter["rag/query_rewriter.py (qwen3:1.7b)"]
         Rewriter --> |Normalized Query| Retrieve["rag/retrieve.py"]
         Retrieve --> VectorDB
         VectorDB --> |Top-5 Context & Sources (Filtered <= 0.47)| Pipeline
-        Pipeline --> Generator["rag/generator.py (Ollama gpt-oss:latest)"]
+        Pipeline --> Generator["rag/generator.py (Ollama llama3.2:3b)"]
         Generator --> |Token Stream| Streamlit["Streamlit UI (app.py)"]
         Streamlit --> |Real-time Tokens + Source Citations| User
     end
@@ -134,7 +134,7 @@ AI Handbook with RAG/
 ### `rag/query_rewriter.py` — LLM-Based Query Reformulation
 - **Role**: Normalizes user queries prior to embedding and ChromaDB retrieval. Expands workplace acronyms (`wfh` $\rightarrow$ `work from home`, `pto` $\rightarrow$ `paid time off`, `lop` $\rightarrow$ `loss of pay`, etc.), corrects spelling/grammar mistakes, and converts short conversational phrases into searchable policy terms.
 - **Key Settings**:
-  - `REWRITER_MODEL = "gpt-oss:latest"`
+  - `REWRITER_MODEL = "qwen3:1.7b"`
   - `temperature = 0.0` (fully deterministic query reformulation)
   - `keep_alive = "1h"`
 - **Prompt Guardrails**:
@@ -148,9 +148,9 @@ AI Handbook with RAG/
 ---
 
 ### `rag/generator.py` — LLM Prompting & Response Generation
-- **Role**: Manages model interaction with Ollama (`gpt-oss:latest`) and enforces strict anti-hallucination prompt constraints.
+- **Role**: Manages model interaction with Ollama (`llama3.2:3b`) and enforces strict anti-hallucination prompt constraints.
 - **Key Settings**:
-  - `LLM_MODEL = "gpt-oss:latest"`
+  - `LLM_MODEL = "llama3.2:3b"`
   - `temperature = 0.2` (enforces strict deterministic, factual, low-hallucination outputs)
   - `keep_alive = "1h"` (ensures model stays resident in RAM/VRAM across user queries).
 - **Functions**:
@@ -273,7 +273,7 @@ AI Handbook with RAG/
    ▼
 4. PROMPT ASSEMBLY & STREAMING (rag/generator.py)
    ├─ Fills POLICY CONTEXT and EMPLOYEE QUESTION into strict prompt template
-   ├─ Calls ollama.chat(model="gpt-oss:latest", stream=True, keep_alive="1h")
+   ├─ Calls ollama.chat(model="llama3.2:3b", stream=True, keep_alive="1h")
    └─ Yields tokens back through generator
    │
    ▼

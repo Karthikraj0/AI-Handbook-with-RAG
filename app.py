@@ -858,20 +858,6 @@ with st.sidebar:
             display_query = query if len(query) <= 55 else query[:52] + "..."
             st.markdown(f'<div class="sidebar-history-item">{display_query}</div>', unsafe_allow_html=True)
 
-    # System Status
-    st.markdown('<div class="sidebar-section-header">⚙️ System</div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="sidebar-card sidebar-status-card">
-            <div class="status-row"><span>Retrieval</span><strong>ONLINE</strong></div>
-            <div class="status-row"><span>LLM</span><strong>OLLAMA</strong></div>
-            <div class="status-row"><span>Mode</span><strong>RAG</strong></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 # ==========================================
 # Main Layout
 # ==========================================
@@ -884,7 +870,6 @@ st.markdown(
             <div class="vintage-header-title">📖 AI Handbook</div>
             <div class="vintage-header-sub">RAG-Powered Organizational Knowledge Base</div>
         </div>
-        <div class="vintage-badge">Status: Active RAG</div>
     </div>
     """,
     unsafe_allow_html=True,

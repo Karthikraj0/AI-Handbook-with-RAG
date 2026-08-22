@@ -20,19 +20,20 @@ Built with **Streamlit**, **PyMuPDF**, **ChromaDB**, and **Ollama** (`gpt-oss` /
 
 ```mermaid
 graph TD
-    subgraph Ingestion_Phase ["Offline Ingestion Pipeline"]
-        PDFs["PDF Documents (documents/*.pdf)"] --> Loader["rag/loader.py (PyMuPDF)"]
-        Loader --> Chunker["rag/chunker.py (Sliding Window)"]
-        Chunker --> Embedder["rag/embeddings.py (nomic-embed-text)"]
-        Embedder --> VectorDB["rag/vectorstore.py (ChromaDB)"]
+    subgraph Ingestion_Pipeline ["Ingestion (Offline)"]
+        A["Company Policy PDFs (documents/*.pdf)"] --> B["PyMuPDF Loader (rag/loader.py)"]
+        B --> C["Sliding-Window Chunker (rag/chunker.py)"]
+        C --> D["Embedding Generator (rag/embeddings.py)"]
+        D --> E["ChromaDB Collection (rag/vectorstore.py)"]
     end
 
-    subgraph Runtime_Phase ["Runtime RAG Execution"]
-        User["User Question (Streamlit UI)"] --> Pipeline["rag/pipeline.py"]
-        Pipeline --> Retrieve["rag/retrieve.py"]
-        Retrieve --> VectorDB
-        VectorDB --> |Top-5 Context & Citations| Pipeline
-        Pipeline --> Generator["rag/generator.py (Ollama gpt-oss)"]
+    subgraph Query_Pipeline ["Query Execution (Runtime)"]
+        Q["Employee Question (UI / app.py)"] --> Pipeline["rag/pipeline.py"]
+        Pipeline --> Rewriter["rag/query_rewriter.py (qwen3:1.7b)"]
+        Rewriter --> Retrieve["rag/retrieve.py"]
+        Retrieve --> E
+        E --> |Top-5 Chunks (Filtered <= 0.47)| Pipeline
+        Pipeline --> Generator["rag/generator.py (Ollama llama3.2:3b)"]
         Generator --> |Token Stream| Streamlit["Streamlit UI (app.py)"]
         Streamlit --> |Real-time Answer + Sources| User
     end
@@ -79,7 +80,8 @@ graph TD
 - [Ollama](https://ollama.com/) installed and running locally with the required models:
   ```bash
   ollama pull nomic-embed-text
-  ollama pull gpt-oss:latest
+  ollama pull qwen3:1.7b
+  ollama pull llama3.2:3b
   ```
 
 ### 2. Clone the Repository
