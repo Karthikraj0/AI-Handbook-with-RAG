@@ -72,10 +72,13 @@ def ask_question(query, temp_session_id: str = None):
     # Combine retrieved chunks
     context = "\n\n".join(documents)
 
+    is_custom_doc = bool(temp_session_id and has_temp_session(temp_session_id))
+
     # Generate answer using original user query and retrieved context
     answer = generate_answer(
         query,
-        context
+        context,
+        is_custom_doc=is_custom_doc
     )
 
     return {
@@ -125,10 +128,13 @@ def ask_question_stream(query, temp_session_id: str = None):
     # Combine retrieved chunks
     context = "\n\n".join(documents)
 
+    is_custom_doc = bool(temp_session_id and has_temp_session(temp_session_id))
+
     # Stream answer generator using original user query and retrieved context
     stream = generate_answer_stream(
         query,
-        context
+        context,
+        is_custom_doc=is_custom_doc
     )
 
     return {

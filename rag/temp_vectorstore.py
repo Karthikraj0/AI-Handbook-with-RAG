@@ -28,8 +28,8 @@ def index_temp_pdf(session_id: str, file_bytes: bytes, filename: str) -> dict:
     if not documents:
         raise ValueError("No extractable text found in the uploaded PDF. It may be a scanned or image-only file.")
 
-    # 2. Chunk text
-    chunks = chunk_documents(documents)
+    # 2. Chunk text with 300-word chunk size for comprehensive document coverage
+    chunks = chunk_documents(documents, chunk_size=300, overlap=50)
     if not chunks:
         raise ValueError("Could not generate valid text chunks from the uploaded PDF.")
 

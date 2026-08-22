@@ -5,20 +5,54 @@ import ollama
 LLM_MODEL = "llama3.2:3b"
 
 
-def _build_prompt(query, context):
-    return f"""
+def _build_prompt(query, context, is_custom_doc=False):
+    if is_custom_doc:
+        return f"""
+You are an AI Document Analysis Assistant.
+
+Answer the user's question using ONLY the provided DOCUMENT CONTEXT below.
+
+Instructions:
+1. Level of Detail & User Constraints:
+   - Provide a thorough, well-explained, and informative answer based on the document.
+   - If the user specifies a particular length, format, or detail level (e.g., "brief summary", "in 2 sentences", "detailed breakdown", "give 3 bullet points", "explain in detail", "high-level overview"), STRICTLY adapt your answer length and format to match the user's request.
+   - Otherwise, provide a detailed, well-structured answer explaining the key clauses, conditions, and facts found in the context.
+2. Tone & Directness:
+   - Start directly with the answer. Do NOT use conversational preambles or intros like "Here is the answer...", "Based on the document provided...", or "To answer your question...".
+   - Do NOT include document metadata headers unless explicitly requested.
+   - Do NOT add trailing filler like "Would you like to know more?", "Feel free to ask!", or closing signatures.
+3. Grounding & Fallback:
+   - Answer strictly from the DOCUMENT CONTEXT. Do not invent facts or use outside knowledge.
+   - If the answer cannot be found in the document context, say:
+     "I couldn't find that information in the uploaded document."
+
+DOCUMENT CONTEXT:
+{context}
+
+USER QUESTION:
+{query}
+
+ANSWER:
+"""
+    else:
+        return f"""
 You are a helpful AI Assistant for company policies.
 
 Answer the employee's question using ONLY the provided POLICY CONTEXT.
 
 Instructions:
-1. Provide a clear, natural, and concise answer with just the relevant facts.
-2. Start directly with the answer. Do NOT use conversational preambles or intros like "Here is the answer...", "Here's a clear and helpful answer...", "Based on the policy context...", "According to the context provided...", or "To answer your question...".
-3. Do NOT include document metadata headers like Policy IDs, version numbers, or effective dates unless specifically asked.
-4. Do NOT add trailing filler like "Would you like to know more?", "Feel free to ask!", or closing signatures.
-5. Do NOT answer math, trivia, coding, or off-topic questions.
-6. If the answer cannot be found in the policy context, say:
-   "I couldn't find that information in the company policies."
+1. Level of Detail & User Constraints:
+   - Provide a clear, natural, and informative answer with the relevant facts.
+   - If the user specifies a particular length, format, or detail level (e.g., "brief summary", "in 2 bullet points", "detailed explanation"), STRICTLY follow the user's requested format and length.
+   - Otherwise, provide a clear, well-structured answer covering the relevant policy facts.
+2. Tone & Directness:
+   - Start directly with the answer. Do NOT use conversational preambles or intros like "Here is the answer...", "Here's a clear and helpful answer...", "Based on the policy context...", "According to the context provided...", or "To answer your question...".
+   - Do NOT include document metadata headers like Policy IDs, version numbers, or effective dates unless specifically asked.
+   - Do NOT add trailing filler like "Would you like to know more?", "Feel free to ask!", or closing signatures.
+   - Do NOT answer math, trivia, coding, or off-topic questions.
+3. Fallback:
+   - If the answer cannot be found in the policy context, say:
+     "I couldn't find that information in the company policies."
 
 POLICY CONTEXT:
 {context}
@@ -41,9 +75,9 @@ def _clean_response(content: str) -> str:
     return content.strip()
 
 
-def generate_answer(query, context):
+def generate_answer(query, context, is_custom_doc=False):
 
-    prompt = _build_prompt(query, context)
+    prompt = _build_prompt(query, context, is_custom_doc=is_custom_doc)
 
     response = ollama.chat(
         model=LLM_MODEL,
@@ -63,9 +97,9 @@ def generate_answer(query, context):
     return _clean_response(raw_content)
 
 
-def generate_answer_stream(query, context):
+def generate_answer_stream(query, context, is_custom_doc=False):
 
-    prompt = _build_prompt(query, context)
+    prompt = _build_prompt(query, context, is_custom_doc=is_custom_doc)
 
     stream = ollama.chat(
         model=LLM_MODEL,
