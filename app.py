@@ -1,5 +1,8 @@
+import uuid
 import streamlit as st
 from rag.pipeline import ask_question, ask_question_stream
+from rag.loader import ImageOnlyPDFError
+from rag.temp_vectorstore import index_temp_pdf, clear_temp_session, has_temp_session
 
 
 # ==========================================
@@ -716,6 +719,15 @@ st.markdown(
 # ==========================================
 # Session State Initialization
 # ==========================================
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())[:8]
+
+if "app_mode" not in st.session_state:
+    st.session_state.app_mode = "🏢 Company Handbook"
+
+if "temp_doc_info" not in st.session_state:
+    st.session_state.temp_doc_info = None
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -840,16 +852,97 @@ with st.sidebar:
 
     st.divider()
 
+    # Knowledge Mode Switcher
+    st.markdown('<div class="sidebar-section-header">🧭 Knowledge Mode</div>', unsafe_allow_html=True)
+    selected_mode = st.radio(
+        "Knowledge Mode",
+        ["🏢 Company Handbook", "📄 Custom PDF Analysis"],
+        index=0 if st.session_state.app_mode == "🏢 Company Handbook" else 1,
+        label_visibility="collapsed"
+    )
+
+    if selected_mode != st.session_state.app_mode:
+        st.session_state.app_mode = selected_mode
+        st.session_state.messages = []
+        st.rerun()
+
+    # Custom Document Ingestion Section (Private & In-Memory)
+    if st.session_state.app_mode == "📄 Custom PDF Analysis":
+        st.markdown('<div class="sidebar-section-header">📤 Upload PDF (Private)</div>', unsafe_allow_html=True)
+        uploaded_pdf = st.file_uploader(
+            "Upload any PDF to analyze in memory",
+            type=["pdf"],
+            help="Indexed purely in-memory for this session with zero disk persistence."
+        )
+
+        if uploaded_pdf is not None:
+            current_indexed_name = st.session_state.temp_doc_info.get("filename") if st.session_state.temp_doc_info else None
+            if current_indexed_name != uploaded_pdf.name:
+                with st.spinner("Processing & indexing PDF in memory..."):
+                    try:
+                        doc_stats = index_temp_pdf(
+                            session_id=st.session_state.session_id,
+                            file_bytes=uploaded_pdf.getvalue(),
+                            filename=uploaded_pdf.name
+                        )
+                        st.session_state.temp_doc_info = doc_stats
+                        st.session_state.messages = []
+                        st.success(f"Indexed {doc_stats['filename']} ({doc_stats['pages']} pages, {doc_stats['chunks']} chunks)")
+                        st.rerun()
+                    except ImageOnlyPDFError as img_err:
+                        st.markdown(
+                            f"""
+                            <div class="sidebar-card" style="border-left: 3px solid #d32f2f; background: #ffebee; margin-top: 8px;">
+                                <div style="font-weight: 700; font-size: 0.85rem; color: #c62828;">🚫 Scanned / Image-Only PDF</div>
+                                <div style="font-size: 0.78rem; color: #333; margin-top: 4px; line-height: 1.4;">
+                                    {str(img_err)}<br><br>
+                                    The system requires <strong>searchable digital text</strong> to generate embeddings and retrieve answers.
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                    except Exception as ex:
+                        st.error(f"Error indexing PDF: {str(ex)}")
+
+        if st.session_state.temp_doc_info:
+            info = st.session_state.temp_doc_info
+            st.markdown(
+                f"""
+                <div class="sidebar-card" style="border-left: 3px solid #111111; background: #FFFFFF; margin-top: 8px;">
+                    <div style="font-weight: 700; font-size: 0.85rem; color: #111111;">📄 Active Document</div>
+                    <div style="font-size: 0.8rem; font-family: 'Space Mono', monospace; margin: 4px 0; word-break: break-all;">{info['filename']}</div>
+                    <div style="font-size: 0.75rem; color: #666666;">{info['pages']} pages • {info['chunks']} chunks</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            if st.button("✕ Clear Document", use_container_width=True):
+                clear_temp_session(st.session_state.session_id)
+                st.session_state.temp_doc_info = None
+                st.session_state.messages = []
+                st.rerun()
+
     # About
     st.markdown('<div class="sidebar-section-header">ℹ️ About</div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="sidebar-card sidebar-about-card">
-            RAG-powered conversational assistant for fast lookup and synthesis of official handbook guidelines, policies, and operational procedures.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    if st.session_state.app_mode == "🏢 Company Handbook":
+        st.markdown(
+            """
+            <div class="sidebar-card sidebar-about-card">
+                RAG-powered conversational assistant for fast lookup and synthesis of official handbook guidelines, policies, and operational procedures.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            """
+            <div class="sidebar-card sidebar-about-card">
+                Private in-memory session. Upload any PDF to perform semantic search and Q&A without modifying permanent company policies.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # Conversation History
     if st.session_state.history_queries:
@@ -858,17 +951,26 @@ with st.sidebar:
             display_query = query if len(query) <= 55 else query[:52] + "..."
             st.markdown(f'<div class="sidebar-history-item">{display_query}</div>', unsafe_allow_html=True)
 
+
 # ==========================================
 # Main Layout
 # ==========================================
 
 # Top Header
+if st.session_state.app_mode == "🏢 Company Handbook":
+    header_title = "📖 AI Handbook"
+    header_sub = "RAG-Powered Organizational Knowledge Base"
+else:
+    active_name = st.session_state.temp_doc_info['filename'] if st.session_state.temp_doc_info else "No Document Uploaded"
+    header_title = "📄 Document Analysis Studio"
+    header_sub = f"Private In-Memory Semantic Q&A • {active_name}"
+
 st.markdown(
-    """
+    f"""
     <div class="vintage-header">
         <div>
-            <div class="vintage-header-title">📖 AI Handbook</div>
-            <div class="vintage-header-sub">RAG-Powered Organizational Knowledge Base</div>
+            <div class="vintage-header-title">{header_title}</div>
+            <div class="vintage-header-sub">{header_sub}</div>
         </div>
     </div>
     """,
@@ -876,7 +978,12 @@ st.markdown(
 )
 
 # Chat Input at bottom
-chat_input_val = st.chat_input("Ask a question about the handbook, policies, or procedures...")
+if st.session_state.app_mode == "🏢 Company Handbook":
+    input_placeholder_text = "Ask a question about the handbook, policies, or procedures..."
+else:
+    input_placeholder_text = "Ask any question about your uploaded document..."
+
+chat_input_val = st.chat_input(input_placeholder_text)
 if chat_input_val:
     handle_query(chat_input_val)
 
@@ -885,45 +992,71 @@ welcome_placeholder = st.empty()
 
 if not st.session_state.messages:
     with welcome_placeholder.container():
-        st.markdown(
-            """
-            <div class="vintage-welcome-card">
-                <div class="vintage-stamp">AI Knowledge Assistant</div>
-                <h2>Welcome to the AI Handbook</h2>
-                <p>Your intelligent retrieval assistant for rapid inquiry into organizational guidelines, workplace policies, and procedural documentation.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        if st.session_state.app_mode == "🏢 Company Handbook":
+            st.markdown(
+                """
+                <div class="vintage-welcome-card">
+                    <div class="vintage-stamp">AI Knowledge Assistant</div>
+                    <h2>Welcome to the AI Handbook</h2>
+                    <p>Your intelligent retrieval assistant for rapid inquiry into organizational guidelines, workplace policies, and procedural documentation.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        st.markdown('<div class="section-title">💡 Suggested Inquiries:</div>', unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.button(
-                "📋 What is the remote work policy?",
-                on_click=handle_query,
-                args=("What is the remote work policy?",),
-                use_container_width=True,
-            )
-            st.button(
-                "💳 What is the reimbursement policy?",
-                on_click=handle_query,
-                args=("What is the reimbursement policy?",),
-                use_container_width=True,
-            )
-        with col2:
-            st.button(
-                "✈️ How do I request time off?",
-                on_click=handle_query,
-                args=("How do I request time off?",),
-                use_container_width=True,
-            )
-            st.button(
-                "🏥 What are the employee benefits?",
-                on_click=handle_query,
-                args=("What are the employee benefits?",),
-                use_container_width=True,
-            )
+            st.markdown('<div class="section-title">💡 Suggested Inquiries:</div>', unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.button(
+                    "📋 What is the remote work policy?",
+                    on_click=handle_query,
+                    args=("What is the remote work policy?",),
+                    use_container_width=True,
+                )
+                st.button(
+                    "💳 What is the reimbursement policy?",
+                    on_click=handle_query,
+                    args=("What is the reimbursement policy?",),
+                    use_container_width=True,
+                )
+            with col2:
+                st.button(
+                    "✈️ How do I request time off?",
+                    on_click=handle_query,
+                    args=("How do I request time off?",),
+                    use_container_width=True,
+                )
+                st.button(
+                    "🏥 What are the employee benefits?",
+                    on_click=handle_query,
+                    args=("What are the employee benefits?",),
+                    use_container_width=True,
+                )
+        else:
+            # Custom PDF Mode
+            if st.session_state.temp_doc_info:
+                active_doc = st.session_state.temp_doc_info
+                st.markdown(
+                    f"""
+                    <div class="vintage-welcome-card">
+                        <div class="vintage-stamp">Private Analysis Mode</div>
+                        <h2>{active_doc['filename']}</h2>
+                        <p>Document loaded ({active_doc['pages']} pages, {active_doc['chunks']} chunks). Ask any question below to extract answers and citations directly from this file.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    """
+                    <div class="vintage-welcome-card">
+                        <div class="vintage-stamp">Private Analysis Mode</div>
+                        <h2>Upload a PDF Document</h2>
+                        <p>Select or drag-and-drop any PDF file using the sidebar uploader on the left. The document will be analyzed in-memory for this session with zero disk persistence.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 else:
     welcome_placeholder.empty()
 
@@ -984,10 +1117,17 @@ if "pending_prompt" in st.session_state:
         )
 
         try:
+            # Determine Session Routing (Temporary In-Memory vs Permanent DB)
+            temp_id = (
+                st.session_state.session_id
+                if (st.session_state.app_mode == "📄 Custom PDF Analysis" and st.session_state.temp_doc_info)
+                else None
+            )
+
             # ------------------------------------------
             # Execute Real RAG Pipeline (Retrieval + Stream)
             # ------------------------------------------
-            response_data = ask_question_stream(pending_prompt)
+            response_data = ask_question_stream(pending_prompt, temp_session_id=temp_id)
 
             stream = response_data.get("stream")
             sources = response_data.get("sources", [])
@@ -1000,7 +1140,10 @@ if "pending_prompt" in st.session_state:
                 answer_placeholder.markdown(answer)
 
             # Render Sources if information was found
-            is_not_found = "couldn't find that information in the company policies" in answer.lower()
+            is_not_found = (
+                "couldn't find that information in the company policies" in answer.lower()
+                or "couldn't find that information in the uploaded document" in answer.lower()
+            )
             valid_sources = [] if is_not_found else sources
 
             if valid_sources:

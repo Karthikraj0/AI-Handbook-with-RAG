@@ -2,11 +2,13 @@ import logging
 from rag.query_rewriter import reformulate_query
 from rag.retrieve import retrieve_documents
 from rag.generator import generate_answer, generate_answer_stream
+from rag.temp_vectorstore import retrieve_temp_documents, has_temp_session
 
 logger = logging.getLogger(__name__)
 
 DISTANCE_THRESHOLD = 0.47
 NO_POLICY_FOUND_MSG = "I couldn't find that information in the company policies."
+NO_TEMP_FOUND_MSG = "I couldn't find that information in the uploaded document."
 
 
 def _filter_results_by_threshold(results, threshold=DISTANCE_THRESHOLD):
@@ -32,27 +34,37 @@ def _filter_results_by_threshold(results, threshold=DISTANCE_THRESHOLD):
     return filtered_docs, filtered_metas
 
 
-def ask_question(query):
+def ask_question(query, temp_session_id: str = None):
     # Step 1: Reformulate query for semantic search (with safe fallback)
     reformulated_query = reformulate_query(query)
 
-    # Step 2: Retrieve relevant policy chunks using reformulated query
-    results = retrieve_documents(
-        query,
-        n_results=5,
-        reformulated_query=reformulated_query
-    )
+    # Step 2: Retrieve relevant policy chunks (Temporary session vs Permanent DB)
+    if temp_session_id and has_temp_session(temp_session_id):
+        results = retrieve_temp_documents(
+            session_id=temp_session_id,
+            query=query,
+            n_results=5,
+            reformulated_query=reformulated_query
+        )
+        fallback_msg = NO_TEMP_FOUND_MSG
+    else:
+        results = retrieve_documents(
+            query,
+            n_results=5,
+            reformulated_query=reformulated_query
+        )
+        fallback_msg = NO_POLICY_FOUND_MSG
 
     documents, sources = _filter_results_by_threshold(results, DISTANCE_THRESHOLD)
 
     # Log retrieval metrics for observability
     top_dist = results["distances"][0][0] if results and results.get("distances") and results["distances"][0] else None
-    logger.info(f"[RAG Pipeline] Original: '{query}' | Reformulated: '{reformulated_query}' | Top Distance: {top_dist}")
+    logger.info(f"[RAG Pipeline] TempSession: {temp_session_id} | Original: '{query}' | Reformulated: '{reformulated_query}' | Top Distance: {top_dist}")
 
-    # No relevant policy found within threshold
+    # No relevant context found within threshold
     if not documents:
         return {
-            "answer": NO_POLICY_FOUND_MSG,
+            "answer": fallback_msg,
             "sources": [],
             "reformulated_query": reformulated_query
         }
@@ -60,7 +72,7 @@ def ask_question(query):
     # Combine retrieved chunks
     context = "\n\n".join(documents)
 
-    # Generate answer using original user query and retrieved policy context
+    # Generate answer using original user query and retrieved context
     answer = generate_answer(
         query,
         context
@@ -73,27 +85,37 @@ def ask_question(query):
     }
 
 
-def ask_question_stream(query):
+def ask_question_stream(query, temp_session_id: str = None):
     # Step 1: Reformulate query for semantic search (with safe fallback)
     reformulated_query = reformulate_query(query)
 
-    # Step 2: Retrieve relevant policy chunks using reformulated query
-    results = retrieve_documents(
-        query,
-        n_results=5,
-        reformulated_query=reformulated_query
-    )
+    # Step 2: Retrieve relevant chunks (Temporary session vs Permanent DB)
+    if temp_session_id and has_temp_session(temp_session_id):
+        results = retrieve_temp_documents(
+            session_id=temp_session_id,
+            query=query,
+            n_results=5,
+            reformulated_query=reformulated_query
+        )
+        fallback_msg = NO_TEMP_FOUND_MSG
+    else:
+        results = retrieve_documents(
+            query,
+            n_results=5,
+            reformulated_query=reformulated_query
+        )
+        fallback_msg = NO_POLICY_FOUND_MSG
 
     documents, sources = _filter_results_by_threshold(results, DISTANCE_THRESHOLD)
 
     # Log retrieval metrics for observability
     top_dist = results["distances"][0][0] if results and results.get("distances") and results["distances"][0] else None
-    logger.info(f"[RAG Pipeline] Original: '{query}' | Reformulated: '{reformulated_query}' | Top Distance: {top_dist}")
+    logger.info(f"[RAG Pipeline] TempSession: {temp_session_id} | Original: '{query}' | Reformulated: '{reformulated_query}' | Top Distance: {top_dist}")
 
-    # No relevant policy found within threshold
+    # No relevant context found within threshold
     if not documents:
         def fallback_stream():
-            yield NO_POLICY_FOUND_MSG
+            yield fallback_msg
         return {
             "stream": fallback_stream(),
             "sources": [],
@@ -103,7 +125,7 @@ def ask_question_stream(query):
     # Combine retrieved chunks
     context = "\n\n".join(documents)
 
-    # Stream answer generator using original user query and retrieved policy context
+    # Stream answer generator using original user query and retrieved context
     stream = generate_answer_stream(
         query,
         context
