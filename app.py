@@ -432,12 +432,30 @@ st.markdown(
     }
 
     .stChatMessage p,
-    .stChatMessage li,
     .stChatMessage span,
     .stChatMessage strong {
         color: #111111 !important;
         line-height: 1.6 !important;
         font-size: 0.95rem !important;
+    }
+
+    .stChatMessage ul,
+    .stChatMessage ol,
+    div[data-testid="stChatMessageContent"] ul,
+    div[data-testid="stChatMessageContent"] ol {
+        margin: 0.5rem 0 0.8rem 1.4rem !important;
+        padding-left: 0.4rem !important;
+        display: block !important;
+    }
+
+    .stChatMessage li,
+    div[data-testid="stChatMessageContent"] li {
+        color: #111111 !important;
+        margin-bottom: 0.45rem !important;
+        line-height: 1.6 !important;
+        font-size: 0.95rem !important;
+        display: list-item !important;
+        list-style-position: outside !important;
     }
 
     .stChatMessage h1,
