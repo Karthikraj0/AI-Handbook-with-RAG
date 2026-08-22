@@ -31,7 +31,7 @@ graph TD
         User["User Question (Streamlit UI)"] --> Pipeline["rag/pipeline.py"]
         Pipeline --> Retrieve["rag/retrieve.py"]
         Retrieve --> VectorDB
-        VectorDB --> |Top-3 Context & Citations| Pipeline
+        VectorDB --> |Top-5 Context & Citations| Pipeline
         Pipeline --> Generator["rag/generator.py (Ollama gpt-oss)"]
         Generator --> |Token Stream| Streamlit["Streamlit UI (app.py)"]
         Streamlit --> |Real-time Answer + Sources| User

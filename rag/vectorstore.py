@@ -11,7 +11,7 @@ _collection = None
 def get_collection():
     global _collection
     if _collection is None:
-        client = chromadb.PersistentClient(
+        client = chromadb.PersistentClient( 
             path=CHROMA_PATH
         )
         _collection = client.get_or_create_collection(

@@ -30,9 +30,10 @@ graph TD
 
     subgraph Runtime_Phase ["Runtime RAG Execution"]
         User["User Question (Streamlit UI / app.py)"] --> Pipeline["rag/pipeline.py (ask_question_stream)"]
-        Pipeline --> Retrieve["rag/retrieve.py"]
+        Pipeline --> Rewriter["rag/query_rewriter.py (Ollama Reformulation)"]
+        Rewriter --> |Normalized Query| Retrieve["rag/retrieve.py"]
         Retrieve --> VectorDB
-        VectorDB --> |Top-3 Context & Sources| Pipeline
+        VectorDB --> |Top-5 Context & Sources (Filtered <= 0.47)| Pipeline
         Pipeline --> Generator["rag/generator.py (Ollama gpt-oss:latest)"]
         Generator --> |Token Stream| Streamlit["Streamlit UI (app.py)"]
         Streamlit --> |Real-time Tokens + Source Citations| User
@@ -48,6 +49,8 @@ AI Handbook with RAG/
 │
 ├── app.py                      # Streamlit frontend with custom CSS, chat history & streaming
 ├── check.py                    # Standalone CLI testing script for the backend pipeline
+├── test_50_benchmark.py        # Comprehensive 154-question accuracy & confusion matrix benchmark
+├── test_distance_gap.py        # Distance threshold gap evaluation benchmark
 ├── DOCUMENTATION.md            # Complete technical documentation (this file)
 ├── HOW_TO_RUN.txt              # Quickstart guide for running the application
 ├── requirements.txt            # Python dependencies
@@ -116,14 +119,31 @@ AI Handbook with RAG/
 - **Role**: Glues the retrieval module and the generation module together into simple, callable functions.
 - **Functions**:
   - `ask_question(query)`:
-    - Calls `retrieve_documents(query, n_results=3)` to fetch top-3 relevant policy chunks.
+    - Calls `retrieve_documents(query, n_results=5)` to fetch top-5 relevant policy chunks.
     - Joins chunk texts into a unified `context` string.
     - Calls `generate_answer(query, context)` to get the full blocking response.
-    - Returns `{"answer": str, "sources": list}`.
+    - Returns `{"answer": str, "sources": list, "reformulated_query": str}`.
   - `ask_question_stream(query)`:
-    - Calls `retrieve_documents(query, n_results=3)`.
-    - If no relevant documents exist, returns a fallback generator yielding the "not found" string.
-    - Otherwise, calls `generate_answer_stream(query, context)` and returns `{"stream": generator, "sources": list}`.
+    - Calls `reformulate_query(query)` to expand abbreviations, resolve typos, and clarify intent.
+    - Calls `retrieve_documents(query, n_results=5, reformulated_query=reformulated_query)`.
+    - If no relevant documents exist (distance > 0.47), returns a fallback generator yielding the "not found" string.
+    - Otherwise, calls `generate_answer_stream(query, context)` using the original user query and returns `{"stream": generator, "sources": list, "reformulated_query": str}`.
+
+---
+
+### `rag/query_rewriter.py` — LLM-Based Query Reformulation
+- **Role**: Normalizes user queries prior to embedding and ChromaDB retrieval. Expands workplace acronyms (`wfh` $\rightarrow$ `work from home`, `pto` $\rightarrow$ `paid time off`, `lop` $\rightarrow$ `loss of pay`, etc.), corrects spelling/grammar mistakes, and converts short conversational phrases into searchable policy terms.
+- **Key Settings**:
+  - `REWRITER_MODEL = "gpt-oss:latest"`
+  - `temperature = 0.0` (fully deterministic query reformulation)
+  - `keep_alive = "1h"`
+- **Prompt Guardrails**:
+  - Strictly forbidden from answering the question or hallucinating policy facts.
+  - Returns ONLY the concise search query string.
+- **Resilience / Safe Fallback**:
+  - If the LLM call times out, encounters an exception, or returns an empty/unusable string, it automatically falls back to the original user query without failing the pipeline.
+- **Functions**:
+  - `reformulate_query(query: str) -> str`: Transforms raw user query into semantic retrieval-ready search query.
 
 ---
 
@@ -147,10 +167,10 @@ AI Handbook with RAG/
 ### `rag/retrieve.py` — Semantic Search & Document Retrieval
 - **Role**: Translates user search queries into embeddings and queries the vector database.
 - **Functions**:
-  - `retrieve_documents(query, n_results=3)`:
+  - `retrieve_documents(query, n_results=5)`:
     1. Obtains the persistent ChromaDB collection via `get_collection()`.
     2. Generates an embedding vector for the incoming user query using `create_embedding(query)`.
-    3. Queries ChromaDB using vector similarity (`n_results=3`).
+    3. Queries ChromaDB using vector similarity (`n_results=5`).
     4. Returns a results dictionary containing `documents` (text chunks), `metadatas` (document name and page number), and `distances`.
 
 ---
@@ -247,7 +267,7 @@ AI Handbook with RAG/
    ▼
 3. SEMANTIC RETRIEVAL (rag/retrieve.py)
    ├─ Calls rag.embeddings.create_embedding(query) via Ollama (nomic-embed-text)
-   ├─ Queries ChromaDB collection for top-3 nearest neighbor chunks
+   ├─ Queries ChromaDB collection for top-5 nearest neighbor chunks
    └─ Extracts retrieved texts + metadata (e.g., leave_policy.pdf, Page 1)
    │
    ▼

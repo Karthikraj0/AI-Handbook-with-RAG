@@ -1,6 +1,13 @@
+import sys
 import numpy as np
+
+# Ensure UTF-8 output encoding on Windows console
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from rag.vectorstore import get_collection
 from rag.embeddings import create_embedding
+from rag.query_rewriter import reformulate_query
 
 THRESHOLD = 0.47
 
@@ -140,89 +147,210 @@ IRRELEVANT_QUESTIONS_50 = [
     "What is the world record for the 100-meter sprint?"
 ]
 
+# ==============================================================================
+# EDGE CASES & ACRONYM BENCHMARKS
+# ==============================================================================
+RELEVANT_EDGE_CASES = [
+    # Acronyms & Abbreviations
+    "wfh?",
+    "WFH",
+    "wfh policy",
+    "pto balance",
+    "how many days pto?",
+    "lop leave rules",
+    "vpn connection guide",
+    "pf contribution percentage",
+    "ta/da reimbursement rates",
+    "byod security guidelines",
+    "hr email contact",
+    "nda policy requirements",
+    
+    # Short & Minimal Queries (Single / Double words)
+    "leave?",
+    "sick leave",
+    "maternity",
+    "paternity",
+    "resignation",
+    "wifi password",
+    "per diem allowance",
+    "gym subsidy",
+    "laptop policy",
+    "notice period",
+    
+    # Typos & Conversational Slang
+    "can i wrk from hmoe?",
+    "sick leav apply procedure",
+    "reimbursment for travel",
+    "whats the notice period here",
+    "can i take unpaid leve?"
+]
+
+IRRELEVANT_EDGE_CASES = [
+    # External Acronyms & Tech / Finance
+    "ROI of NVDA stock",
+    "AWS EC2 pricing model",
+    "NASA JWST orbital path",
+    "NATO member countries",
+    "GDP of Japan in 2024",
+    "BGP routing table protocol",
+    "SQL injection in PHP",
+    "LLM fine-tuning using LoRA",
+    "TCP 3-way handshake",
+    "IP address of Google DNS",
+    "ETF vs Mutual Fund",
+    "IPO listing process",
+
+    # Short External Trivia / Queries
+    "pizza recipe",
+    "tesla stock price",
+    "weather in tokyo",
+    "olympics 2024 winner",
+    "who is elon musk?",
+    "how to tie a tie",
+    "coffee maker repair",
+    "how to change car tire",
+    "bitcoin halving date",
+    "speed of light",
+
+    # Conversational / Nonsense / Out of Scope
+    "tell me a funny joke",
+    "write a python script for snake game",
+    "what is the meaning of life?",
+    "can you solve 2x + 5 = 15?",
+    "translate hello to spanish"
+]
+
+
+def evaluate_question_set(collection, questions, is_relevant, threshold=THRESHOLD, use_reformulation=True):
+    distances = []
+    correct_count = 0
+    failures = []
+
+    for idx, q in enumerate(questions, 1):
+        search_query = reformulate_query(q) if use_reformulation else q
+        emb = create_embedding(search_query)
+        res = collection.query(query_embeddings=[emb], n_results=1)
+        dist = res["distances"][0][0]
+        distances.append(dist)
+
+        if is_relevant:
+            # Relevant questions should have distance <= threshold
+            if dist <= threshold:
+                correct_count += 1
+            else:
+                failures.append((idx, q, search_query, dist))
+        else:
+            # Irrelevant questions should have distance > threshold
+            if dist > threshold:
+                correct_count += 1
+            else:
+                failures.append((idx, q, search_query, dist))
+
+    return distances, correct_count, failures
+
 
 def run_50_question_benchmark():
     collection = get_collection()
     
     print("=" * 90)
-    print(f"BENCHMARK EVALUATION: 50 RELEVANT vs 50 IRRELEVANT QUESTIONS")
+    print("BENCHMARK EVALUATION: STANDARD (50 + 50) & EDGE CASES (ACRONYMS / SHORT QUERIES)")
     print(f"Distance Metric: Cosine | Active Threshold: {THRESHOLD}")
     print("=" * 90)
     
-    # 1. Evaluate Relevant Questions
-    relevant_distances = []
-    relevant_passes = 0
-    relevant_failures = []
+    # 1. Standard 50 Relevant Questions
+    print("\n[1/4] Evaluating 50 Standard Relevant Questions...")
+    std_rel_dists, std_rel_passes, std_rel_fails = evaluate_question_set(
+        collection, RELEVANT_QUESTIONS_50, is_relevant=True, threshold=THRESHOLD
+    )
     
-    print("\nProcessing 50 Relevant Questions...")
-    for idx, q in enumerate(RELEVANT_QUESTIONS_50, 1):
-        emb = create_embedding(q)
-        res = collection.query(query_embeddings=[emb], n_results=1)
-        dist = res["distances"][0][0]
-        relevant_distances.append(dist)
-        
-        passed = dist <= THRESHOLD
-        if passed:
-            relevant_passes += 1
-        else:
-            relevant_failures.append((idx, q, dist))
-            
-    # 2. Evaluate Irrelevant Questions
-    irrelevant_distances = []
-    irrelevant_blocks = 0
-    irrelevant_leaks = []
-    
-    print("Processing 50 Irrelevant Questions...")
-    for idx, q in enumerate(IRRELEVANT_QUESTIONS_50, 1):
-        emb = create_embedding(q)
-        res = collection.query(query_embeddings=[emb], n_results=1)
-        dist = res["distances"][0][0]
-        irrelevant_distances.append(dist)
-        
-        blocked = dist > THRESHOLD
-        if blocked:
-            irrelevant_blocks += 1
-        else:
-            irrelevant_leaks.append((idx, q, dist))
+    # 2. Standard 50 Irrelevant Questions
+    print("[2/4] Evaluating 50 Standard Irrelevant Questions...")
+    std_irr_dists, std_irr_blocks, std_irr_leaks = evaluate_question_set(
+        collection, IRRELEVANT_QUESTIONS_50, is_relevant=False, threshold=THRESHOLD
+    )
 
-    # 3. Print Results & Confusion Matrix
+    # 3. Relevant Edge Cases & Acronyms
+    print(f"[3/4] Evaluating {len(RELEVANT_EDGE_CASES)} Relevant Edge Cases & Acronyms...")
+    edge_rel_dists, edge_rel_passes, edge_rel_fails = evaluate_question_set(
+        collection, RELEVANT_EDGE_CASES, is_relevant=True, threshold=THRESHOLD
+    )
+
+    # 4. Irrelevant Edge Cases & Out-of-Domain Acronyms
+    print(f"[4/4] Evaluating {len(IRRELEVANT_EDGE_CASES)} Irrelevant Edge Cases...")
+    edge_irr_dists, edge_irr_blocks, edge_irr_leaks = evaluate_question_set(
+        collection, IRRELEVANT_EDGE_CASES, is_relevant=False, threshold=THRESHOLD
+    )
+
+    # --- RESULTS: STANDARD BENCHMARK ---
     print("\n" + "=" * 90)
-    print("CONFUSION MATRIX & ACCURACY")
+    print("1. STANDARD BENCHMARK RESULTS (100 Questions)")
     print("=" * 90)
     print(f"Relevant Questions (Target: PASS <= {THRESHOLD}):")
-    print(f"  Passed (True Positives)  : {relevant_passes} / 50 ({relevant_passes/50*100:.1f}%)")
-    print(f"  Rejected (False Negatives): {len(relevant_failures)} / 50 ({len(relevant_failures)/50*100:.1f}%)")
-    
+    print(f"  Passed (True Positives)   : {std_rel_passes} / 50 ({std_rel_passes/50*100:.1f}%)")
+    print(f"  Rejected (False Negatives): {len(std_rel_fails)} / 50 ({len(std_rel_fails)/50*100:.1f}%)")
     print(f"\nIrrelevant Questions (Target: REJECT > {THRESHOLD}):")
-    print(f"  Blocked (True Negatives) : {irrelevant_blocks} / 50 ({irrelevant_blocks/50*100:.1f}%)")
-    print(f"  Accepted (False Positives): {len(irrelevant_leaks)} / 50 ({len(irrelevant_leaks)/50*100:.1f}%)")
+    print(f"  Blocked (True Negatives)  : {std_irr_blocks} / 50 ({std_irr_blocks/50*100:.1f}%)")
+    print(f"  Accepted (False Positives): {len(std_irr_leaks)} / 50 ({len(std_irr_leaks)/50*100:.1f}%)")
+    
+    std_total_acc = (std_rel_passes + std_irr_blocks) / 100 * 100
+    std_error_rate = 100.0 - std_total_acc
+    print(f"\n>> Standard Accuracy  : {std_total_acc:.1f}% ({std_rel_passes + std_irr_blocks}/100)")
+    print(f">> Standard Error Rate: {std_error_rate:.1f}% ({len(std_rel_fails) + len(std_irr_leaks)} errors)")
 
-    total_accuracy = (relevant_passes + irrelevant_blocks) / 100 * 100
-    print(f"\nOVERALL ACCURACY: {total_accuracy:.1f}% ({relevant_passes + irrelevant_blocks}/100 correct)")
-
-    # 4. Statistical Distribution
-    rel_d = np.array(relevant_distances)
-    irr_d = np.array(irrelevant_distances)
+    # --- RESULTS: EDGE CASES BENCHMARK ---
+    n_edge_rel = len(RELEVANT_EDGE_CASES)
+    n_edge_irr = len(IRRELEVANT_EDGE_CASES)
+    total_edge = n_edge_rel + n_edge_irr
 
     print("\n" + "=" * 90)
-    print("DISTRIBUTION STATISTICS (Cosine Distance)")
+    print(f"2. EDGE CASES BENCHMARK RESULTS ({total_edge} Questions: Acronyms, Slang, Typos)")
     print("=" * 90)
-    print(f"{'Category':<22} | {'Min':<8} | {'Median':<8} | {'Mean':<8} | {'Max':<8} | {'Std Dev':<8}")
-    print("-" * 90)
-    print(f"{'Relevant (50 Qs)':<22} | {rel_d.min():<8.4f} | {np.median(rel_d):<8.4f} | {rel_d.mean():<8.4f} | {rel_d.max():<8.4f} | {rel_d.std():<8.4f}")
-    print(f"{'Irrelevant (50 Qs)':<22} | {irr_d.min():<8.4f} | {np.median(irr_d):<8.4f} | {irr_d.mean():<8.4f} | {irr_d.max():<8.4f} | {irr_d.std():<8.4f}")
-    print("-" * 90)
-    print(f"Distance Gap (Irrel Min - Rel Max): {irr_d.min() - rel_d.max():.4f}")
+    print(f"Relevant Edge Cases (Target: PASS <= {THRESHOLD}):")
+    print(f"  Passed (True Positives)   : {edge_rel_passes} / {n_edge_rel} ({edge_rel_passes/n_edge_rel*100:.1f}%)")
+    print(f"  Rejected (False Negatives): {len(edge_rel_fails)} / {n_edge_rel} ({len(edge_rel_fails)/n_edge_rel*100:.1f}%)")
+    print(f"\nIrrelevant Edge Cases (Target: REJECT > {THRESHOLD}):")
+    print(f"  Blocked (True Negatives)  : {edge_irr_blocks} / {n_edge_irr} ({edge_irr_blocks/n_edge_irr*100:.1f}%)")
+    print(f"  Accepted (False Positives): {len(edge_irr_leaks)} / {n_edge_irr} ({len(edge_irr_leaks)/n_edge_irr*100:.1f}%)")
 
-    if relevant_failures:
-        print("\n[!] False Negatives (Relevant Qs rejected):")
-        for idx, q, d in relevant_failures:
-            print(f"  #{idx:02d}: dist={d:.4f} > {THRESHOLD} -> \"{q}\"")
+    edge_total_acc = (edge_rel_passes + edge_irr_blocks) / total_edge * 100
+    edge_error_rate = 100.0 - edge_total_acc
+    print(f"\n>> Edge Case Accuracy  : {edge_total_acc:.1f}% ({edge_rel_passes + edge_irr_blocks}/{total_edge})")
+    print(f">> Edge Case Error Rate: {edge_error_rate:.1f}% ({len(edge_rel_fails) + len(edge_irr_leaks)} errors)")
 
-    if irrelevant_leaks:
-        print("\n[!] False Positives (Irrelevant Qs accepted):")
-        for idx, q, d in irrelevant_leaks:
-            print(f"  #{idx:02d}: dist={d:.4f} <= {THRESHOLD} -> \"{q}\"")
+    # --- OVERALL COMBINED SUMMARY ---
+    all_rel_passes = std_rel_passes + edge_rel_passes
+    all_rel_total = 50 + n_edge_rel
+    all_irr_blocks = std_irr_blocks + edge_irr_blocks
+    all_irr_total = 50 + n_edge_irr
+    grand_total = all_rel_total + all_irr_total
+    grand_correct = all_rel_passes + all_irr_blocks
+    grand_accuracy = grand_correct / grand_total * 100
+    grand_error_rate = 100.0 - grand_accuracy
+
+    print("\n" + "=" * 90)
+    print(f"3. GRAND TOTAL SUMMARY ({grand_total} Questions Evaluated)")
+    print("=" * 90)
+    print(f"Grand Accuracy  : {grand_accuracy:.1f}% ({grand_correct}/{grand_total} correct)")
+    print(f"Grand Error Rate: {grand_error_rate:.1f}% ({grand_total - grand_correct}/{grand_total} errors)")
+
+    # --- FALSE POSITIVES & FALSE NEGATIVES BREAKDOWN ---
+    if edge_rel_fails or std_rel_fails:
+        print("\n" + "-" * 90)
+        print("[!] RELEVANT QUESTIONS REJECTED (False Negatives - dist > threshold):")
+        print("-" * 90)
+        for idx, q, sq, d in std_rel_fails:
+            print(f"  [Standard #{idx:02d}] dist={d:.4f} > {THRESHOLD} | Original: \"{q}\" -> Reformulated: \"{sq}\"")
+        for idx, q, sq, d in edge_rel_fails:
+            print(f"  [Edge Case #{idx:02d}] dist={d:.4f} > {THRESHOLD} | Original: \"{q}\" -> Reformulated: \"{sq}\"")
+
+    if edge_irr_leaks or std_irr_leaks:
+        print("\n" + "-" * 90)
+        print("[!] IRRELEVANT QUESTIONS ACCEPTED (False Positives - dist <= threshold):")
+        print("-" * 90)
+        for idx, q, sq, d in std_irr_leaks:
+            print(f"  [Standard #{idx:02d}] dist={d:.4f} <= {THRESHOLD} | Original: \"{q}\" -> Reformulated: \"{sq}\"")
+        for idx, q, sq, d in edge_irr_leaks:
+            print(f"  [Edge Case #{idx:02d}] dist={d:.4f} <= {THRESHOLD} | Original: \"{q}\" -> Reformulated: \"{sq}\"")
 
     print("\n" + "=" * 90)
 

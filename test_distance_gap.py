@@ -3,24 +3,32 @@ from rag.vectorstore import get_collection
 from rag.embeddings import create_embedding
 
 RELEVANT_QUESTIONS = [
-    # Leave Policy
+    # Standard Leave Policy
     "How many days of annual leave am I entitled to?",
     "What is the procedure for applying for sick leave?",
     "Can maternity leave be extended?",
-    # WFH Policy
+    # Standard WFH & Attendance Policy
     "How many days per week can employees work from home?",
     "What equipment does the company provide for remote work?",
-    # IT Security Policy
-    "How often must I change my company account password?",
-    "Can I connect my personal USB drive to my work laptop?",
-    # Attendance Policy
     "What are the official core working hours of the office?",
     "What happens if an employee is consistently late?",
-    # Reimbursement & Travel Policy
+    # Standard IT Security & Benefits & Travel
+    "How often must I change my company account password?",
+    "Can I connect my personal USB drive to my work laptop?",
     "What is the maximum daily food allowance for business travel?",
     "How do I submit an expense report for reimbursement?",
-    # Benefits
     "What health insurance benefits does the company provide?",
+    # Edge Cases & Acronyms (Relevant)
+    "wfh?",
+    "WFH policy",
+    "pto balance rules",
+    "lop leave policy",
+    "vpn access guidelines",
+    "pf provident fund contribution",
+    "ta/da travel allowance",
+    "leave?",
+    "maternity",
+    "work from hmoe",
 ]
 
 IRRELEVANT_QUESTIONS = [
@@ -38,6 +46,17 @@ IRRELEVANT_QUESTIONS = [
     # Out-of-Scope Enterprise / External
     "What is the current stock price of Apple Inc?",
     "How do I file taxes in Germany as a freelancer?",
+    # Edge Cases & External Acronyms (Irrelevant)
+    "ROI of NVDA stock",
+    "NASA JWST orbit path",
+    "AWS EC2 instance types",
+    "NATO membership criteria",
+    "GDP of Japan in 2024",
+    "BGP routing table protocol",
+    "who is the CEO of Tesla?",
+    "how to make espresso coffee",
+    "recipe for chocolate cake",
+    "what is quantum computing?",
 ]
 
 
