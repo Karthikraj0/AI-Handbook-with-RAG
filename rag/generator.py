@@ -3,6 +3,7 @@ import ollama
 
 
 LLM_MODEL = "llama3.2:3b"
+TEMPERATURE = 0.5
 
 
 def _build_prompt(query, context, is_custom_doc=False):
@@ -13,18 +14,20 @@ You are an AI Document Analysis Assistant.
 Answer the user's question using ONLY the provided DOCUMENT CONTEXT below.
 
 Instructions:
-1. Level of Detail & User Constraints:
-   - Provide a thorough, well-explained, and informative answer based on the document.
-   - If the user specifies a particular length, format, or detail level (e.g., "brief summary", "in 2 sentences", "detailed breakdown", "give 3 bullet points", "explain in detail", "high-level overview"), STRICTLY adapt your answer length and format to match the user's request.
+1. Topic Title:
+   - Always begin your response with a concise, clear markdown heading (e.g., "### [Subject / Policy Title]") that summarizes the topic being answered.
+2. Answer Content & Detail:
+   - Provide a thorough, well-explained, and informative answer based on the document context.
+   - If the user specifies a requested format or length (e.g., "brief summary", "in 2 sentences", "detailed breakdown", "give 3 bullet points", "explain in detail"), STRICTLY adapt your answer length and format to match the user's request.
    - Otherwise, provide a detailed, well-structured answer explaining the key clauses, conditions, and facts found in the context.
-2. Formatting & Lists:
+3. Formatting & Lists:
    - When presenting multiple points or lists, ALWAYS place every point on its own NEW line with a markdown hyphen and blank line separation (e.g., "- Point 1\\n\\n- Point 2").
    - NEVER concatenate or join multiple bullet points onto the same line.
-3. Tone & Directness:
-   - Start directly with the answer. Do NOT use conversational preambles or intros like "Here is the answer...", "Based on the document provided...", or "To answer your question...".
+4. Tone & Directness:
+   - Do NOT use conversational preambles or intros like "Here is the answer...", "Based on the document provided...", or "To answer your question...".
    - Do NOT include document metadata headers unless explicitly requested.
    - Do NOT add trailing filler like "Would you like to know more?", "Feel free to ask!", or closing signatures.
-4. Grounding & Fallback:
+5. Grounding & Fallback:
    - Answer strictly from the DOCUMENT CONTEXT. Do not invent facts or use outside knowledge.
    - If the answer cannot be found in the document context, say:
      "I couldn't find that information in the uploaded document."
@@ -44,19 +47,21 @@ You are a helpful AI Assistant for company policies.
 Answer the employee's question using ONLY the provided POLICY CONTEXT.
 
 Instructions:
-1. Level of Detail & User Constraints:
+1. Topic Title:
+   - Always begin your response with a concise, clear markdown heading (e.g., "### [Policy / Subject Title]") that summarizes what is being answered.
+2. Answer Content & Detail:
    - Provide a clear, natural, and informative answer with the relevant facts.
    - If the user specifies a particular length, format, or detail level (e.g., "brief summary", "in 2 bullet points", "detailed explanation"), STRICTLY follow the user's requested format and length.
    - Otherwise, provide a clear, well-structured answer covering the relevant policy facts.
-2. Formatting & Lists:
+3. Formatting & Lists:
    - When presenting multiple points or lists, ALWAYS place every point on its own NEW line with a markdown hyphen (e.g., "- Point 1\\n\\n- Point 2").
    - NEVER combine multiple bullet points onto the same line.
-3. Tone & Directness:
-   - Start directly with the answer. Do NOT use conversational preambles or intros like "Here is the answer...", "Here's a clear and helpful answer...", "Based on the policy context...", or "To answer your question...".
+4. Tone & Directness:
+   - Do NOT use conversational preambles or intros like "Here is the answer...", "Here's a clear and helpful answer...", "Based on the policy context...", or "To answer your question...".
    - Do NOT include document metadata headers like Policy IDs, version numbers, or effective dates unless specifically asked.
    - Do NOT add trailing filler like "Would you like to know more?", "Feel free to ask!", or closing signatures.
    - Do NOT answer math, trivia, coding, or off-topic questions.
-4. Fallback:
+5. Fallback:
    - If the answer cannot be found in the policy context, say:
      "I couldn't find that information in the company policies."
 
@@ -71,13 +76,16 @@ ANSWER:
 
 
 def _clean_response(content: str) -> str:
-    """Strips any thinking/reasoning blocks and formats bullet points onto separate lines."""
+    """Strips any thinking/reasoning blocks, normalizes headings, and formats bullet points."""
     if not content:
         return ""
     if "</think>" in content:
         content = content.split("</think>", 1)[1]
     elif "<think>" in content:
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
+
+    # Normalize multiple header hashes (e.g. '### ### Title' -> '### Title')
+    content = re.sub(r'^(#{1,6})\s*#{1,6}\s*', r'\1 ', content)
 
     # Format inline unicode bullet points (e.g., "text. • Next point") into proper markdown line breaks
     content = re.sub(r'([^\n])\s*[•*]\s+', r'\1\n\n- ', content)
@@ -100,7 +108,7 @@ def generate_answer(query, context, is_custom_doc=False):
             }
         ],
         options={
-            "temperature": 0.2
+            "temperature": TEMPERATURE
         },
         keep_alive="1h"
     )
@@ -122,7 +130,7 @@ def generate_answer_stream(query, context, is_custom_doc=False):
             }
         ],
         options={
-            "temperature": 0.2
+            "temperature": TEMPERATURE
         },
         stream=True,
         keep_alive="1h"
